@@ -38,14 +38,7 @@ instance Show Piece where
 
 instance Read Piece where
   readPrec = mkReadPrec $ getHybridable <++ getOther <++ return P where
-    getPrime = mkReadP readPrec -- do
-      -- c <- get
-      -- case c of
-      --   'G' -> return $ Prime G
-      --   'R' -> return $ Prime R
-      --   'B' -> return $ Prime B
-      --   'N' -> return $ Prime N
-      --   _ -> pfail
+    getPrime = mkReadP readPrec
     getHybridable = do
       p@(Prime p1) <- getPrime
       ((\(Prime p2) -> Hybrid p1 p2) `fmap` getPrime) <++ return p
@@ -61,7 +54,7 @@ data Prime = R | B | N | G deriving (Eq, Show)
 data Color = Black | White deriving (Eq, Show)
 data Item = Piece Color Piece | Empty deriving Show
 
-data Board = Board (Array Field Item) deriving Show
+data Board = Board (Array Field Item)
 
 data Vector = Vector (Int, Int)
 
@@ -95,10 +88,6 @@ land (actor, color) target =
       else
         -- capture
         Just $ Piece color actor
-
-emptyBoard = Board $ listArray (Field (1,1), Field (8,8)) (repeat Empty)
-
---initialBoard = emptyBoard // []
 
 iterMoves :: Piece -> Board -> Field -> [Field]
 iterMoves piece (Board board) src =
@@ -159,21 +148,43 @@ readItem = between (char '(') (char ')') readHybrid <++ readSingle where
         _   -> pfail
     return (if Data.Char.isLower c then White else Black, prime)
     
-readDigit (f, r, acc) = do
+readDigit (r, f, acc) = do
   c <- get
   if inRange ranks_range c then
-    let r' = index ranks_range c + 1 in
-      readFEN (f, r + r', acc)
+    let f' = index ranks_range c + 1 in
+      readFEN (r, f + f', acc)
     else pfail
 
-readFEN state@(f, r, acc) = do
-  case (f, r) of
+readFEN state@(r, f, acc) = do
+  case (r, f) of
     (7, 8) -> return acc
-    (_, 8) -> char '/' >> readFEN(f+1, 0, acc)
-    _ -> (readItem >>= (\item -> readFEN(f, r+1, (Field (f+1, r+1), item):acc))) <++ readDigit state
+    (_, 8) -> char '/' >> readFEN(r+1, 0, acc)
+    _ -> (readItem >>= (\item -> readFEN(r, f+1, (Field (f+1, r+1), item):acc))) <++ readDigit state
 
 -- reads FEN
 instance Read Board where
   readPrec = mkReadPrec $ do
     ls <- readFEN (0, 0, [])
     return $ Board (listArray (Field (1,1), Field (8,8)) (repeat Empty) // ls)
+
+-- writes FEN
+instance Show Board where
+  show (Board arr) = showFEN 1 0 1
+    where
+      showFEN 8 empties 9 = showEmpties empties
+      showFEN r empties 9 = showEmpties empties ++ "/" ++ showFEN (r+1) 0 1
+      showFEN r empties f = case arr ! (Field (f, r)) of
+            Empty -> showFEN r (empties+1) (f+1)
+            Piece c piece -> showEmpties empties ++ showPiece c piece ++ showFEN r 0 (f+1)
+
+      showPiece c piece = wrap $ fixCase $ show piece where
+        fixCase = case c of White -> map Data.Char.toLower
+                            Black -> map Data.Char.toUpper
+        wrap = case piece of Hybrid _ _ -> \str -> "(" ++ str ++ ")"
+                             _ -> id
+      showEmpties 0 = ""
+      showEmpties empties = show empties
+
+emptyBoard = Board $ listArray (Field (1,1), Field (8,8)) (repeat Empty)
+initialBoard :: Board
+initialBoard = read "rnbgkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBGKBNR"
