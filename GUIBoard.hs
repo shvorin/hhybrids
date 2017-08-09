@@ -18,8 +18,9 @@ gui = do
   let onPaint1 dc viewArea = do
         drawRect dc (Rect (xsize-1) (xsize-1) (8*xsize+2) (8*xsize+2)) [ ]
         let drawField col row = do
-              let colour = if (col + row) `mod` 2 == 0 then grey else white
-              drawRect dc (Rect (xsize*row) (xsize*col) xsize xsize) [ brush := brushSolid colour ]
+              drawRect dc (Rect (xsize*row) (xsize*col) xsize xsize) [ brush := brushSolid rgbCol ]
+                where rgbCol = if (col + row) `mod` 2 == 0
+                               then colorRGB 153 153 153 else colorRGB 243 243 243
         sequence_ [drawField col row | col <- [1..8], row <- [1..8]]
 
         sequence_ [drawText dc (show (9-col))
