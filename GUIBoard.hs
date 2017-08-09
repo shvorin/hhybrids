@@ -4,6 +4,8 @@ import Graphics.UI.WX
 import Graphics.UI.WXCore.Events
 import Graphics.UI.WXCore.WxcTypes
 import Graphics.UI.WXCore.Draw
+import System.FilePath (FilePath, (</>))
+import Pieces
 
 main :: IO ()
 main = start gui
@@ -11,10 +13,8 @@ main = start gui
 gui :: IO ()
 gui = do
   selected <- varCreate Nothing
-  
-  let img = image "images/bishopb.gif"
-  let bmap = bitmap "images/bishopb.gif"
-  let xsize = 96
+
+  let Single bmap = getBitmap $ Piece Black (Prime G)
   let onPaint1 dc viewArea = do
         drawRect dc (Rect (xsize-1) (xsize-1) (8*xsize+2) (8*xsize+2)) [ ]
         let drawField col row = do
@@ -30,6 +30,11 @@ gui = do
 
   let onPaint dc viewArea = do
         onPaint1 dc viewArea
+        sz <- get bmap size
+        drawBitmap dc bmap (centerField (read "d8") sz) True []
+        drawBitmap dc bmap (upperField (read "c7") sz) True []
+        drawBitmap dc bmap (lowerField (read "c6") sz) True []
+        drawBitmap dc bmap (upperField (read "c6") sz) True []
         p <- varGet selected
         case p of
           Just pos -> do
@@ -60,3 +65,47 @@ gui = do
   set f [layout := boxed "foo" $ container p $ space (10*xsize) (10*xsize)
         ]
   return ()
+
+data PieceImage p = None
+                  | Single p
+                  | Double p p deriving Show
+
+instance Functor PieceImage where
+  fmap f None = None
+  fmap f (Single p1) = Single $ f p1
+  fmap f (Double p1 p2) = Double (f p1) (f p2)
+
+getBitmapFile :: Item -> PieceImage FilePath
+getBitmapFile Empty = None
+getBitmapFile (Piece c p) =
+  case p of (Hybrid p1 p2) -> Double (mkPath $ primeName p1) (mkPath $ primeName p2)
+            Prime p1  -> Single $ mkPath $ primeName p1
+            K -> Single $ mkPath "king"
+            P -> Single $ mkPath "pawn"
+  where
+    mkPath pName = "images" </> (pName ++ cName ++ ".gif")
+    cName = case c of { White -> "w"; Black -> "b" }
+    primeName p = case p of G -> "queen"
+                            N -> "knight"
+                            R -> "rook"
+                            B -> "bishop"
+
+getBitmap :: Item -> PieceImage (Bitmap ())
+getBitmap = fmap bitmap . getBitmapFile
+
+xsize = 96
+
+centerField (Field (f, r)) (Size w h) =
+  Point x y where
+    x = f*xsize + (xsize - w) `div` 2
+    y = (9-r)*xsize + (xsize - h) `div` 2
+
+upperField (Field (f, r)) (Size w h) =
+  Point x y where
+    x = f*xsize + (xsize - w) `div` 2
+    y = (9-r)*xsize + (xsize*2 - h*3) `div` 6
+
+lowerField (Field (f, r)) (Size w h) =
+  Point x y where
+    x = f*xsize + (xsize - w) `div` 2
+    y = (9-r)*xsize + (xsize*4 - h*3) `div` 6
