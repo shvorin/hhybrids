@@ -5,6 +5,7 @@ import Graphics.UI.WXCore.Events
 import Graphics.UI.WXCore.WxcTypes
 import Graphics.UI.WXCore.Draw
 import System.FilePath (FilePath, (</>))
+import Data.Array.Unboxed
 import Pieces
 
 main :: IO ()
@@ -13,8 +14,8 @@ main = start gui
 gui :: IO ()
 gui = do
   selected <- varCreate Nothing
+  currBoard <- varCreate initialBoard
 
-  let Single bmap = getBitmap $ Piece Black (Prime G)
   let onPaint1 dc viewArea = do
         drawRect dc (Rect (xsize-1) (xsize-1) (8*xsize+2) (8*xsize+2)) [ ]
         let drawField col row = do
@@ -31,23 +32,30 @@ gui = do
 
   let onPaint dc viewArea = do
         onPaint1 dc viewArea
-        drawItem dc (Piece Black (Prime G)) (read "d8")
-        drawItem dc (Piece White (Hybrid B G)) (read "e6")
-        p <- varGet selected
-        case p of
-          Just pos -> do
-            drawBitmap dc bmap pos True [] 
+        brd@(Board arr) <- varGet currBoard
+        drawBoard dc brd
+        sp <- varGet selected
+        case sp of
+          Just (field, placement, pos) -> do
+            let item = arr ! field
+            drawItemAt dc item pos False
             circle dc pos 20 [brush := brushSolid red]
           Nothing -> return ()
 
-  let onClick point = varSet selected $ Just point
-  let onUnclick point = varSet selected Nothing
+  let onClick point = do
+        let sp = selectPiece point
+        putStrLn $ "selected: " ++ show sp ++ ", at " ++ show point
+        varSet selected $ sp
+
+  let onUnclick point = do
+        putStrLn $ "drop to " ++ (show $ selectPiece point)
+        varSet selected Nothing
+
   let onDrag point = do
-        putStrLn $ "on mouse: " ++ show point
-        p <- varGet selected
-        case p of
+        sp <- varGet selected
+        case sp of
           Nothing -> return ()
-          Just _ -> varSet selected (Just point)
+          Just (field, placement, _) -> varSet selected (Just (field, placement, point))
   
   f <- frame [ resizeable := False ]
   p <- panel f [on keyboard      := \k -> (putStrLn $ "key: " ++ show k)
@@ -93,16 +101,24 @@ getBitmap = fmap bitmap . getBitmapFile
 
 xsize = 96
 
-data Placement = Center | Upper | Lower
+data Placement = Center | Upper | Lower deriving Show
 
-placePiece :: Placement -> Field -> Size -> Point
-placePiece placement (Field f r) (Size w h) = Point x y where
-  x = f*xsize + (xsize - w) `div` 2
-  y = (9-r)*xsize + (xsize*offset - h*3) `div` 6
+placePieceAligned :: Placement -> Point -> Size -> Point
+placePieceAligned placement (Point x y) (Size w h) = Point x' y' where
+  x' = x + (xsize - w) `div` 2
+  y' = y + (xsize*offset - h*3) `div` 6
   offset = case placement of { Center -> 3 ; Upper -> 2 ; Lower -> 4}
 
+placePiece :: Point -> Size -> Point
+placePiece (Point x y) (Size w h) = Point x' y' where
+  x' = x - w `div` 2
+  y' = y - h `div` 2
+
 drawItem :: DC () -> Item -> Field -> IO ()
-drawItem dc item field =
+drawItem dc item (Field f r) = drawItemAt dc item (Point (f*xsize) ((9-r)*xsize)) True
+
+drawItemAt :: DC () -> Item -> Point -> Bool -> IO ()
+drawItemAt dc item point align =
   case getBitmap item of
    None -> return ()
    Single bm -> drawBitmapAt bm Center
@@ -110,4 +126,25 @@ drawItem dc item field =
   where
     drawBitmapAt bm placement = do
       sz <- get bm size
-      drawBitmap dc bm (placePiece placement field sz) True []
+      let point' = if align then placePieceAligned placement point sz
+                   else placePiece point sz
+      drawBitmap dc bm point' True []
+
+drawBoard :: DC () -> Board -> IO ()
+drawBoard dc (Board arr) =
+  mapM_ (\(field, item) -> drawItem dc item field) $ assocs arr
+
+type Selected = (Field, Placement, Point)
+selectPiece :: Point -> Maybe Selected
+selectPiece point@(Point x y) =
+  if inRange (1,8) f && inRange (1,8) r then
+    Just (Field f (9-r), placement, point)
+  else Nothing
+  where
+    f = x `div` xsize
+    r = y `div` xsize
+    r3 = (y*3) `div` xsize
+    placement = case r3 `mod` 3 of
+                 0 -> Upper
+                 1 -> Center
+                 2 -> Lower
