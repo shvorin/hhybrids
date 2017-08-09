@@ -30,11 +30,8 @@ gui = do
 
   let onPaint dc viewArea = do
         onPaint1 dc viewArea
-        sz <- get bmap size
-        drawBitmap dc bmap (centerField (read "d8") sz) True []
-        drawBitmap dc bmap (upperField (read "c7") sz) True []
-        drawBitmap dc bmap (lowerField (read "c6") sz) True []
-        drawBitmap dc bmap (upperField (read "c6") sz) True []
+        drawItem dc (Piece Black (Prime G)) (read "d8")
+        drawItem dc (Piece White (Hybrid B G)) (read "e6")
         p <- varGet selected
         case p of
           Just pos -> do
@@ -95,17 +92,21 @@ getBitmap = fmap bitmap . getBitmapFile
 
 xsize = 96
 
-centerField (Field f r) (Size w h) =
-  Point x y where
-    x = f*xsize + (xsize - w) `div` 2
-    y = (9-r)*xsize + (xsize - h) `div` 2
+data Placement = Center | Upper | Lower
 
-upperField (Field f r) (Size w h) =
-  Point x y where
-    x = f*xsize + (xsize - w) `div` 2
-    y = (9-r)*xsize + (xsize*2 - h*3) `div` 6
+placePiece :: Placement -> Field -> Size -> Point
+placePiece placement (Field f r) (Size w h) = Point x y where
+  x = f*xsize + (xsize - w) `div` 2
+  y = (9-r)*xsize + (xsize*offset - h*3) `div` 6
+  offset = case placement of { Center -> 3 ; Upper -> 2 ; Lower -> 4}
 
-lowerField (Field f r) (Size w h) =
-  Point x y where
-    x = f*xsize + (xsize - w) `div` 2
-    y = (9-r)*xsize + (xsize*4 - h*3) `div` 6
+drawItem :: DC () -> Item -> Field -> IO ()
+drawItem dc item field =
+  case getBitmap item of
+   None -> return ()
+   Single bm -> drawBitmapAt bm Center
+   Double bm1 bm2 -> drawBitmapAt bm1 Lower >> drawBitmapAt bm2 Upper
+  where
+    drawBitmapAt bm placement = do
+      sz <- get bm size
+      drawBitmap dc bm (placePiece placement field sz) True []
