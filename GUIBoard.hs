@@ -95,17 +95,17 @@ getBitmap = fmap bitmap . getBitmapFile
 
 xsize = 96
 
-centerField (Field (f, r)) (Size w h) =
+centerField (Field f r) (Size w h) =
   Point x y where
     x = f*xsize + (xsize - w) `div` 2
     y = (9-r)*xsize + (xsize - h) `div` 2
 
-upperField (Field (f, r)) (Size w h) =
+upperField (Field f r) (Size w h) =
   Point x y where
     x = f*xsize + (xsize - w) `div` 2
     y = (9-r)*xsize + (xsize*2 - h*3) `div` 6
 
-lowerField (Field (f, r)) (Size w h) =
+lowerField (Field f r) (Size w h) =
   Point x y where
     x = f*xsize + (xsize - w) `div` 2
     y = (9-r)*xsize + (xsize*4 - h*3) `div` 6
