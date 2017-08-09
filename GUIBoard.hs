@@ -12,8 +12,8 @@ gui :: IO ()
 gui = do
   selected <- varCreate Nothing
   
-  let img = image "bishopb.gif"
-  let bmap = bitmap "bishopb.gif"
+  let img = image "images/bishopb.gif"
+  let bmap = bitmap "images/bishopb.gif"
   let xsize = 96
   let onPaint1 dc viewArea = do
         drawRect dc (Rect (xsize-1) (xsize-1) (8*xsize+2) (8*xsize+2)) [ ]
