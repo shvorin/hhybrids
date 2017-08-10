@@ -40,7 +40,7 @@ gui = do
         pos <- varGet dragPos
         case sp of
          Nothing -> return ()
-         Just (loc, left, actor) -> do
+         Just (loc, rest, actor) -> do
            drawItemAt dc actor pos
            circle dc pos 20 [brush := brushSolid red]
 
@@ -113,7 +113,7 @@ drawItem :: DC () -> Item -> Maybe (Loc, Item, Item) -> Loc -> IO ()
 drawItem dc item masked loc@(Loc f r) =
   drawItemAt dc item' (Point (f*xsize + xsize `div` 2) ((9-r)*xsize + xsize `div` 2)) where
     item' = case masked of
-             Just (loc', left, _) | loc == loc' -> left
+             Just (loc', rest, _) | loc == loc' -> rest
              _ -> item
 
 drawItemAt :: DC () -> Item -> Point -> IO ()
@@ -134,22 +134,24 @@ drawBoard :: DC () -> Board -> Maybe (Loc, Item, Item) -> IO ()
 drawBoard dc (Board arr) masked =
   mapM_ (\(loc, item) -> drawItem dc item masked loc) $ assocs arr
 
-selectPiece :: Point -> Board -> Maybe (Loc, Item, Item)
-selectPiece (Point x y) (Board arr) =
-  if inRange (1,8) f && inRange (1,8) r then
-    case item of
-     Empty -> Nothing
-     Piece c (Hybrid p1 p2) -> Just (loc, left, actor)
-       where
-         (left, actor) = case r3 `mod` 3 of
-           0 {- Upper -}  -> (Piece c (Prime p1), Piece c (Prime p2))
-           1 {- Center -} -> (Empty, item)
-           2 {- Lower -}  -> (Piece c (Prime p2), Piece c (Prime p1))
-     Piece c _ -> Just (loc, Empty, item)
-  else Nothing
+selectLoc :: Point -> Maybe Loc
+selectLoc (Point x y) =
+  if inRange (1,8) f && inRange (1,8) r then Just loc else Nothing
   where
     f = x `div` xsize
     r = y `div` xsize
     loc = Loc f (9-r)
-    r3 = (y*3) `div` xsize
-    item = arr ! loc
+
+selectPiece :: Point -> Board -> Maybe (Loc, Item, Item)
+selectPiece point@(Point x y) (Board arr) = do
+  loc <- selectLoc point
+  let item = arr ! loc
+  case item of
+   Empty -> Nothing
+   Piece c (Hybrid p1 p2) -> Just (loc, rest, actor)
+     where
+       (rest, actor) = case ((y*3) `div` xsize) `mod` 3 of
+         0 {- Upper -}  -> (Piece c (Prime p1), Piece c (Prime p2))
+         1 {- Center -} -> (Empty, item)
+         2 {- Lower -}  -> (Piece c (Prime p2), Piece c (Prime p1))
+   Piece c _ -> Just (loc, Empty, item)
