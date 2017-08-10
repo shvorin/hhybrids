@@ -34,14 +34,14 @@ gui = do
 
   let onPaint dc viewArea = do
         onPaint1 dc viewArea
-        brd@(Board arr) <- varGet currBoard
-        drawBoard dc brd
         sp <- varGet selected
+        brd@(Board arr) <- varGet currBoard
+        drawBoard dc brd sp
         pos <- varGet dragPos
         case sp of
           Just (loc, placement) -> do
             let item = arr ! loc
-            drawItemAt dc item pos False
+            drawItemAt dc item (invertMask placement) pos False
             circle dc pos 20 [brush := brushSolid red]
           Nothing -> return ()
 
@@ -115,15 +115,26 @@ placePiece (Point x y) (Size w h) = Point x' y' where
   x' = x - w `div` 2
   y' = y - h `div` 2
 
-drawItem :: DC () -> Item -> Loc -> IO ()
-drawItem dc item (Loc f r) = drawItemAt dc item (Point (f*xsize) ((9-r)*xsize)) True
+drawItem :: DC () -> Item -> Maybe Selected -> Loc -> IO ()
+drawItem dc item masked loc@(Loc f r) =
+  drawItemAt dc item masked' (Point (f*xsize) ((9-r)*xsize)) True where
+  masked' = case masked of
+              Just (loc', placement) | loc == loc' -> Just placement
+              _ -> Nothing
 
-drawItemAt :: DC () -> Item -> Point -> Bool -> IO ()
-drawItemAt dc item point align =
+drawItemAt :: DC () -> Item -> Maybe Placement -> Point -> Bool -> IO ()
+drawItemAt dc item masked point align =
   case getBitmap item of
    None -> return ()
-   Single bm -> drawBitmapAt bm Center
-   Double bm1 bm2 -> drawBitmapAt bm1 Lower >> drawBitmapAt bm2 Upper
+   Single bm -> case masked of { Nothing -> drawBitmapAt bm Center ; Just _ -> return () }
+   Double bm1 bm2 -> case masked of
+                       Nothing -> drawLower >> drawUpper
+                       Just Lower -> drawUpper
+                       Just Upper -> drawLower
+                       Just Center -> return ()
+     where
+       drawLower = drawBitmapAt bm1 Lower
+       drawUpper = drawBitmapAt bm2 Upper
   where
     drawBitmapAt bm placement = do
       sz <- get bm size
@@ -131,9 +142,9 @@ drawItemAt dc item point align =
                    else placePiece point sz
       drawBitmap dc bm point' True []
 
-drawBoard :: DC () -> Board -> IO ()
-drawBoard dc (Board arr) =
-  mapM_ (\(loc, item) -> drawItem dc item loc) $ assocs arr
+drawBoard :: DC () -> Board -> Maybe Selected -> IO ()
+drawBoard dc (Board arr) masked =
+  mapM_ (\(loc, item) -> drawItem dc item masked loc) $ assocs arr
 
 type Selected = (Loc, Placement)
 selectPiece :: Point -> Maybe Selected
@@ -149,3 +160,7 @@ selectPiece (Point x y) =
                  0 -> Upper
                  1 -> Center
                  2 -> Lower
+
+invertMask Center = Nothing
+invertMask Upper = Just Lower
+invertMask Lower = Just Upper
