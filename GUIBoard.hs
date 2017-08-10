@@ -13,6 +13,7 @@ main = start gui
 
 gui :: IO ()
 gui = do
+  dragPos <- varCreate pointNull
   selected <- varCreate Nothing
   currBoard <- varCreate initialBoard
 
@@ -36,8 +37,9 @@ gui = do
         brd@(Board arr) <- varGet currBoard
         drawBoard dc brd
         sp <- varGet selected
+        pos <- varGet dragPos
         case sp of
-          Just (loc, placement, pos) -> do
+          Just (loc, placement) -> do
             let item = arr ! loc
             drawItemAt dc item pos False
             circle dc pos 20 [brush := brushSolid red]
@@ -46,17 +48,15 @@ gui = do
   let onClick point = do
         let sp = selectPiece point
         putStrLn $ "selected: " ++ show sp ++ ", at " ++ show point
-        varSet selected $ sp
+        varSet selected sp
+        varSet dragPos point
 
   let onUnclick point = do
         putStrLn $ "drop to " ++ (show $ selectPiece point)
         varSet selected Nothing
 
   let onDrag point = do
-        sp <- varGet selected
-        case sp of
-          Nothing -> return ()
-          Just (loc, placement, _) -> varSet selected (Just (loc, placement, point))
+        varSet dragPos point
   
   f <- frame [ resizeable := False ]
   p <- panel f [on keyboard      := \k -> (putStrLn $ "key: " ++ show k)
@@ -135,11 +135,11 @@ drawBoard :: DC () -> Board -> IO ()
 drawBoard dc (Board arr) =
   mapM_ (\(loc, item) -> drawItem dc item loc) $ assocs arr
 
-type Selected = (Loc, Placement, Point)
+type Selected = (Loc, Placement)
 selectPiece :: Point -> Maybe Selected
-selectPiece point@(Point x y) =
+selectPiece (Point x y) =
   if inRange (1,8) f && inRange (1,8) r then
-    Just (Loc f (9-r), placement, point)
+    Just (Loc f (9-r), placement)
   else Nothing
   where
     f = x `div` xsize
