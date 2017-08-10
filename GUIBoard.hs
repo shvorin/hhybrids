@@ -18,17 +18,18 @@ gui = do
 
   let onPaint1 dc viewArea = do
         drawRect dc (Rect (xsize-1) (xsize-1) (8*xsize+2) (8*xsize+2)) [ ]
-        let drawLoc col row = do
-              drawRect dc (Rect (xsize*row) (xsize*col) xsize xsize) [ brush := brushSolid rgbCol ]
-                where rgbCol = if (col + row) `mod` 2 == 0
+        let drawLoc (Loc f r) = do
+              drawRect dc (Rect (xsize*r) (xsize*f) xsize xsize) [ brush := brushSolid rgbCol ]
+                where rgbCol = if (f + r) `mod` 2 == 0
                                then colorRGB 153 153 153 else colorRGB 243 243 243
-        sequence_ [drawLoc col row | col <- [1..8], row <- [1..8]]
+        mapM_ drawLoc $ range (Loc 1 1, Loc 8 8)
 
-        sequence_ [drawText dc (show (9-col))
-                   (Point (xsize `div` 2) (xsize * col + xsize `div` 2)) [] | col <- [1..8]]
-        
-        sequence_ [drawText dc [" abcdefgh " !! row]
-                   (Point (xsize * row + xsize `div` 2) (xsize * 9 + xsize `div` 2)) [] | row <- [1..8]]
+        mapM_ (\r -> drawText dc (show (9-r)) (Point (xsize `div` 2) (xsize * r + xsize `div` 2)) [])
+          [1..8]
+
+        mapM_ (\f -> drawText dc [" abcdefgh " !! f]
+                     (Point (xsize * f + xsize `div` 2) (xsize * 9 + xsize `div` 2)) [])
+          [1..8]
 
   let onPaint dc viewArea = do
         onPaint1 dc viewArea
