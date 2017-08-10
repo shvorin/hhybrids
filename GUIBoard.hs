@@ -18,11 +18,11 @@ gui = do
 
   let onPaint1 dc viewArea = do
         drawRect dc (Rect (xsize-1) (xsize-1) (8*xsize+2) (8*xsize+2)) [ ]
-        let drawField col row = do
+        let drawLoc col row = do
               drawRect dc (Rect (xsize*row) (xsize*col) xsize xsize) [ brush := brushSolid rgbCol ]
                 where rgbCol = if (col + row) `mod` 2 == 0
                                then colorRGB 153 153 153 else colorRGB 243 243 243
-        sequence_ [drawField col row | col <- [1..8], row <- [1..8]]
+        sequence_ [drawLoc col row | col <- [1..8], row <- [1..8]]
 
         sequence_ [drawText dc (show (9-col))
                    (Point (xsize `div` 2) (xsize * col + xsize `div` 2)) [] | col <- [1..8]]
@@ -36,8 +36,8 @@ gui = do
         drawBoard dc brd
         sp <- varGet selected
         case sp of
-          Just (field, placement, pos) -> do
-            let item = arr ! field
+          Just (loc, placement, pos) -> do
+            let item = arr ! loc
             drawItemAt dc item pos False
             circle dc pos 20 [brush := brushSolid red]
           Nothing -> return ()
@@ -55,7 +55,7 @@ gui = do
         sp <- varGet selected
         case sp of
           Nothing -> return ()
-          Just (field, placement, _) -> varSet selected (Just (field, placement, point))
+          Just (loc, placement, _) -> varSet selected (Just (loc, placement, point))
   
   f <- frame [ resizeable := False ]
   p <- panel f [on keyboard      := \k -> (putStrLn $ "key: " ++ show k)
@@ -114,8 +114,8 @@ placePiece (Point x y) (Size w h) = Point x' y' where
   x' = x - w `div` 2
   y' = y - h `div` 2
 
-drawItem :: DC () -> Item -> Field -> IO ()
-drawItem dc item (Field f r) = drawItemAt dc item (Point (f*xsize) ((9-r)*xsize)) True
+drawItem :: DC () -> Item -> Loc -> IO ()
+drawItem dc item (Loc f r) = drawItemAt dc item (Point (f*xsize) ((9-r)*xsize)) True
 
 drawItemAt :: DC () -> Item -> Point -> Bool -> IO ()
 drawItemAt dc item point align =
@@ -132,13 +132,13 @@ drawItemAt dc item point align =
 
 drawBoard :: DC () -> Board -> IO ()
 drawBoard dc (Board arr) =
-  mapM_ (\(field, item) -> drawItem dc item field) $ assocs arr
+  mapM_ (\(loc, item) -> drawItem dc item loc) $ assocs arr
 
-type Selected = (Field, Placement, Point)
+type Selected = (Loc, Placement, Point)
 selectPiece :: Point -> Maybe Selected
 selectPiece point@(Point x y) =
   if inRange (1,8) f && inRange (1,8) r then
-    Just (Field f (9-r), placement, point)
+    Just (Loc f (9-r), placement, point)
   else Nothing
   where
     f = x `div` xsize

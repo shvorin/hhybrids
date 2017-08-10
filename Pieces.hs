@@ -6,23 +6,23 @@ import Text.ParserCombinators.ReadPrec (readP_to_Prec, readPrec_to_P)
 import qualified Data.Char
 import Text.ParserCombinators.ReadP
 
-data Field = Field Int Int deriving (Eq, Ord, Ix)
+data Loc = Loc Int Int deriving (Eq, Ord, Ix)
 
 mkReadPrec r = readP_to_Prec (\_ -> r)
 mkReadP r = readPrec_to_P r 0
 
-instance Show Field where
-  show (Field f r) = [files !! f] ++ show r where
+instance Show Loc where
+  show (Loc f r) = [files !! f] ++ show r where
     files = ".abcdefgh"
 
 ranks_range = ('1','8')
 files_range = ('a','h')
 
-instance Read Field where
+instance Read Loc where
   readPrec = mkReadPrec $ do
     f <- readFileOrRank files_range
     r <- readFileOrRank ranks_range
-    return $ Field f r
+    return $ Loc f r
       where
         readFileOrRank pair = do
           c <- get
@@ -54,12 +54,12 @@ data Prime = R | B | N | G deriving (Eq, Show)
 data Color = Black | White deriving (Eq, Show)
 data Item = Piece Color Piece | Empty deriving Show
 
-data Board = Board (Array Field Item)
+data Board = Board (Array Loc Item)
 
 data Vector = Vector Int Int
 
-add :: Field -> Vector -> Field
-add (Field x y) (Vector u v) = Field (x+u) (y+v)
+add :: Loc -> Vector -> Loc
+add (Loc x y) (Vector u v) = Loc (x+u) (y+v)
 
 rot90 (x,y) = (-y, x)
 rep4 v = take 4 $ rep v where
@@ -89,7 +89,7 @@ land (actor, color) target =
         -- capture
         Just $ Piece color actor
 
-iterMoves :: Piece -> Board -> Field -> [Field]
+iterMoves :: Piece -> Board -> Loc -> [Loc]
 iterMoves piece (Board board) src =
   do
     v <- attacks piece
@@ -159,13 +159,13 @@ readFEN state@(r, f, acc) = do
   case (r, f) of
     (7, 8) -> return acc
     (_, 8) -> char '/' >> readFEN(r+1, 0, acc)
-    _ -> (readItem >>= (\item -> readFEN(r, f+1, (Field (f+1) (r+1), item):acc))) <++ readDigit state
+    _ -> (readItem >>= (\item -> readFEN(r, f+1, (Loc (f+1) (r+1), item):acc))) <++ readDigit state
 
 -- reads FEN
 instance Read Board where
   readPrec = mkReadPrec $ do
     ls <- readFEN (0, 0, [])
-    return $ Board (listArray (Field 1 1, Field 8 8) (repeat Empty) // ls)
+    return $ Board (listArray (Loc 1 1, Loc 8 8) (repeat Empty) // ls)
 
 -- writes FEN
 instance Show Board where
@@ -173,7 +173,7 @@ instance Show Board where
     where
       showFEN 8 empties 9 = showEmpties empties
       showFEN r empties 9 = showEmpties empties ++ "/" ++ showFEN (r+1) 0 1
-      showFEN r empties f = case arr ! (Field f r) of
+      showFEN r empties f = case arr ! (Loc f r) of
             Empty -> showFEN r (empties+1) (f+1)
             Piece c piece -> showEmpties empties ++ showPiece c piece ++ showFEN r 0 (f+1)
 
@@ -185,6 +185,6 @@ instance Show Board where
       showEmpties 0 = ""
       showEmpties empties = show empties
 
-emptyBoard = Board $ listArray (Field 1 1, Field 8 8) (repeat Empty)
+emptyBoard = Board $ listArray (Loc 1 1, Loc 8 8) (repeat Empty)
 initialBoard :: Board
 initialBoard = read "rnbgkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBGKBNR"
