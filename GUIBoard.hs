@@ -39,24 +39,19 @@ gui = do
         drawBoard dc brd sp
         pos <- varGet dragPos
         case sp of
-          Just (loc, placement) -> do
-            let item = arr ! loc
-            let mask' = case (placement, item) of
-                         (Upper, (Piece _ (Hybrid _ _))) -> Just Lower
-                         (Lower, (Piece _ (Hybrid _ _))) -> Just Upper
-                         _ -> Nothing
-            drawItemAt dc item mask' pos
-            circle dc pos 20 [brush := brushSolid red]
-          Nothing -> return ()
+         Nothing -> return ()
+         Just (loc, left, actor) -> do
+           drawItemAt dc actor pos
+           circle dc pos 20 [brush := brushSolid red]
 
   let onClick point = do
-        let sp = selectPiece point
+        brd <- varGet currBoard
+        let sp = selectPiece point brd
         putStrLn $ "selected: " ++ show sp ++ ", at " ++ show point
         varSet selected sp
         varSet dragPos point
 
   let onUnclick point = do
-        putStrLn $ "drop to " ++ (show $ selectPiece point)
         varSet selected Nothing
 
   let onDrag point = do
@@ -114,23 +109,19 @@ placePiece placement (Point x y) (Size w h) = Point x' y' where
   y' = y - h `div` 2 + (xsize*offset) `div` 6
   offset = case placement of { Center -> 0 ; Upper -> -1 ; Lower -> 1}
 
-drawItem :: DC () -> Item -> Maybe Selected -> Loc -> IO ()
+drawItem :: DC () -> Item -> Maybe (Loc, Item, Item) -> Loc -> IO ()
 drawItem dc item masked loc@(Loc f r) =
-  drawItemAt dc item masked' (Point (f*xsize + xsize `div` 2) ((9-r)*xsize + xsize `div` 2)) where
-  masked' = case masked of
-              Just (loc', placement) | loc == loc' -> Just placement
-              _ -> Nothing
+  drawItemAt dc item' (Point (f*xsize + xsize `div` 2) ((9-r)*xsize + xsize `div` 2)) where
+    item' = case masked of
+             Just (loc', left, _) | loc == loc' -> left
+             _ -> item
 
-drawItemAt :: DC () -> Item -> Maybe Placement -> Point -> IO ()
-drawItemAt dc item masked point =
+drawItemAt :: DC () -> Item -> Point -> IO ()
+drawItemAt dc item point =
   case getBitmap item of
    None -> return ()
-   Single bm -> case masked of { Nothing -> drawBitmapAt bm Center ; Just _ -> return () }
-   Double bm1 bm2 -> case masked of
-                       Nothing -> drawLower >> drawUpper
-                       Just Lower -> drawUpper
-                       Just Upper -> drawLower
-                       Just Center -> return ()
+   Single bm -> drawBitmapAt bm Center
+   Double bm1 bm2 -> drawLower >> drawUpper
      where
        drawLower = drawBitmapAt bm1 Lower
        drawUpper = drawBitmapAt bm2 Upper
@@ -139,22 +130,26 @@ drawItemAt dc item masked point =
       sz <- get bm size
       drawBitmap dc bm (placePiece placement point sz) True []
 
-drawBoard :: DC () -> Board -> Maybe Selected -> IO ()
+drawBoard :: DC () -> Board -> Maybe (Loc, Item, Item) -> IO ()
 drawBoard dc (Board arr) masked =
   mapM_ (\(loc, item) -> drawItem dc item masked loc) $ assocs arr
 
-type Selected = (Loc, Placement)
-selectPiece :: Point -> Maybe Selected
-selectPiece (Point x y) =
+selectPiece :: Point -> Board -> Maybe (Loc, Item, Item)
+selectPiece (Point x y) (Board arr) =
   if inRange (1,8) f && inRange (1,8) r then
-    Just (Loc f (9-r), placement)
+    case item of
+     Empty -> Nothing
+     Piece c (Hybrid p1 p2) -> Just (loc, left, actor)
+       where
+         (left, actor) = case r3 `mod` 3 of
+           0 {- Upper -}  -> (Piece c (Prime p1), Piece c (Prime p2))
+           1 {- Center -} -> (Empty, item)
+           2 {- Lower -}  -> (Piece c (Prime p2), Piece c (Prime p1))
+     Piece c _ -> Just (loc, Empty, item)
   else Nothing
   where
     f = x `div` xsize
     r = y `div` xsize
+    loc = Loc f (9-r)
     r3 = (y*3) `div` xsize
-    placement = case r3 `mod` 3 of
-                 0 -> Upper
-                 1 -> Center
-                 2 -> Lower
-
+    item = arr ! loc
