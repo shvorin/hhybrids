@@ -37,8 +37,8 @@ parseMovement (Vector u v) = case (u, v) of
   (0, _) -> return (Vizir, Vector 0 sv, v')
   (_, 0) -> return (Vizir, Vector su 0, u')
   _ | u' == v' -> return (Ferz, Vector su sv, v')
-  _ | u' * 2 == v' -> return (Knight, Vector (2 * su) sv, v')
-  _ | v' * 2 == u' -> return (Knight, Vector su (2 * sv), u')
+  _ | u' * 2 == v' -> return (Knight, Vector (2 * su) sv, u')
+  _ | v' * 2 == u' -> return (Knight, Vector su (2 * sv), v')
   _ -> mzero -- "no such leaper"
   where
     u' = abs u

@@ -79,14 +79,16 @@ data MoveDesc = MoveDesc { actor :: Piece
                          -- TODO: promotion, etc
                          }
 
-leave :: MonadPlus m => Item -> Piece -> m Item
-leave Empty _ = mzero
-leave (Piece col p) actor =
-  case p of
-    Hybrid p1 p2 | actor == Prime p1 -> return $ Piece col $ Prime p2
-                 | actor == Prime p2 -> return $ Piece col $ Prime p1
-    _ | actor == p                   -> return Empty
-      | otherwise                    -> mzero
+leave :: MonadPlus m => Color -> Item -> Piece -> m Item
+leave _ Empty _ = mzero
+leave turn (Piece col p) actor =
+  if turn == col then
+    case p of
+      Hybrid p1 p2 | actor == Prime p1 -> return $ Piece col $ Prime p2
+                   | actor == Prime p2 -> return $ Piece col $ Prime p1
+      _ | actor == p                   -> return Empty
+        | otherwise                    -> mzero
+  else mzero
 
 occupy :: MonadPlus m => Color -> Item -> Piece -> m Item
 occupy turn Empty actor                                     = return $ Piece turn actor
@@ -103,17 +105,17 @@ xor x y = x /= y
 
 makeMove :: MonadPlus m => Position -> MoveDesc -> m Position
 makeMove (Position (Board brd) turn) (MoveDesc actor src@(Loc _ ySrc) dst _) = do
-  leftItem <- leave srcItem actor
+  leftItem <- leave turn srcItem actor
   occItem <- occupy turn dstItem actor
   pmove@(basicLeaper, basicVector, range) <- parseMovement vec
   _ <- liftBool $ matchPiece pmove
-  _ <- liftBool $ all checkRider [1..range-1]
+  _ <- liftBool $ all (checkRider basicVector) [1..range-1]
   return $ Position (Board (brd // [(src, leftItem), (dst, occItem)])) (inv turn)
   where
     srcItem = brd ! src
     dstItem = brd ! dst
     vec@(Vector _ yVec) = dst `sub` src
-    checkRider k = (brd ! (src `add` (k `mult` vec))) == Empty
+    checkRider basicVector k = (brd ! (src `add` (k `mult` basicVector))) == Empty
 
     matchPiece :: (BasicLeaper, Vector, Int) -> Bool
     matchPiece (basicLeaper, basicVector, range) =
@@ -131,16 +133,17 @@ makeMove (Position (Board brd) turn) (MoveDesc actor src@(Loc _ ySrc) dst _) = d
         matchPawn = pawnIsForward && pawnMatchLeaper && case range of
                                                           1 -> True
                                                           2 -> pawnIsAtSecond
+                                                          _ -> False
 
-        pawnIsForward = (yVec > 0) `xor` (turn == White)
+        pawnIsForward = (yVec < 0) `xor` (turn == White)
         pawnIsAtSecond = case turn of White -> ySrc == 1
                                       Black -> ySrc == 6
-        pawnMatchLeaper = case basicLeaper of Ferz -> isAttack
-                                              Vizir -> not isAttack
+        pawnMatchLeaper = case basicLeaper of Ferz -> isCapture
+                                              Vizir -> not isCapture
                                               _ -> False
 
-    isAttack = case dstItem of Piece col _ | col /= turn -> True
-                               _ -> False
+    isCapture = case dstItem of Piece col _ | col /= turn -> True
+                                _ -> False
 
 readItem = between (char '(') (char ')') readHybrid <++ readSingle where
   readSingle = do
