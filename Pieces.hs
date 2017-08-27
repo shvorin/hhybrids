@@ -1,5 +1,6 @@
 module Pieces where
 
+import Control.Monad
 import Data.Array.Unboxed
 import GHC.Read
 import Text.ParserCombinators.ReadPrec (readP_to_Prec, readPrec_to_P)
@@ -36,7 +37,7 @@ instance Read Piece where
     getPrime = mkReadP readPrec
     getHybridable = do
       p@(Prime p1) <- getPrime
-      ((\(Prime p2) -> Hybrid p1 p2) `fmap` getPrime) <++ return p
+      ((\(Prime p2) -> hybridSorted p1 p2) `fmap` getPrime) <++ return p
     getOther = do
       c <- get
       case c of
@@ -45,36 +46,17 @@ instance Read Piece where
         _ -> pfail
 
 data Piece = K | P | Hybrid Prime Prime | Prime Prime deriving Eq
-data Prime = R | B | N | G deriving (Eq, Show)
+data Prime = R | B | N | G deriving (Eq, Ord, Show)
 data Color = Black | White deriving (Eq, Show)
-data Item = Piece Color Piece | Empty deriving Show
+data Item = Piece Color Piece | Empty deriving (Show, Eq)
+
+hybridSorted p1 p2 | p1 > p2 = Hybrid p2 p1
+                   | otherwise = Hybrid p1 p2
+
+inv Black = White
+inv White = Black
 
 data Board = Board (Array Loc Item)
-
--- attacks :: Piece -> [Vector]
--- attacks = map (uncurry Vector) . attacks' where
---   attacks' piece = case piece of
---                      Prime R -> rep4 (0,1)
---                      Prime B -> rep4 (1,1)
---                      Prime N -> rep4 (1,2) ++ rep4 (2,1)
---                      Hybrid p1 p2 -> attacks' (Prime p1) ++ attacks' (Prime p2)
---                      P -> [(1,1), (-1,1)]
---                      _ | piece `elem` [Prime G, K] -> rep4 (0,1) ++ rep4 (1,1)
-
--- land :: (Piece, Color) -> Item -> Maybe Item
--- land (actor, color) target =
---   case target of
---     Empty -> Just $ Piece color actor
---     Piece targetColor targetPiece ->
---       if color == targetColor then
---         case (actor, targetPiece) of
---           -- join
---           (Prime p1, Prime p2) -> Just $ Piece color (Hybrid p1 p2)
---           _ -> Nothing
---       else
---         -- capture
---         Just $ Piece color actor
-
 
 data Position = Position { board :: Board
                          , turn :: Color
@@ -97,46 +79,68 @@ data MoveDesc = MoveDesc { actor :: Piece
                          -- TODO: promotion, etc
                          }
 
-tryMove :: Position -> MoveDesc -> Either String Position
-tryMove (Position (Board brd) turn) (MoveDesc actor src dst _) = do
-  let srcPiece = brd ! src
-  leftItem <- bar srcPiece
-  (basicLeaper, basicVector, range) <- foo
-  undefined where
-    vec@(Vector u v) = dst `sub` src
-    u' = abs u
-    v' = abs v
-    su = signum u
-    sv = signum v
-    foo :: Either String (BasicLeaper, Vector, Int)
-    foo = case (u, v) of
-            (0, 0) -> Left "dst == src"
-            (0, _) -> Right (Vizir, Vector 0 sv, v)
-            (_, 0) -> Right (Vizir, Vector su 0, u)
-            _ | u' == v' -> Right (Ferz, Vector su sv, 0)
-            _ | u' * 2 == v' -> Right (Knight, Vector (2 * su) sv, v)
-            _ | v' * 2 == u' -> Right (Knight, Vector su (2 * sv), u)
-            _ -> Left "no such leaper"
-    bar :: Item -> Either String Item
-    bar srcItem = case srcItem of
-                    Empty -> Left "empty square"
-                    Piece col p | col == turn ->
-                                    case p of
-                                      Hybrid p1 p2 -> case actor of Prime a | a == p1 -> Right $ Piece turn $ Prime p2
-                                                                    Prime a | a == p2 -> Right $ Piece turn $ Prime p1
-                                                                    _ -> Left "wrong actor"
-                                      _ | p == actor -> Right Empty
-                    Piece _ _ -> Left "wrong turn"
+leave :: MonadPlus m => Item -> Piece -> m Item
+leave Empty _ = mzero
+leave (Piece col p) actor =
+  case p of
+    Hybrid p1 p2 | actor == Prime p1 -> return $ Piece col $ Prime p2
+                 | actor == Prime p2 -> return $ Piece col $ Prime p1
+    _ | actor == p                   -> return Empty
+      | otherwise                    -> mzero
 
+occupy :: MonadPlus m => Color -> Item -> Piece -> m Item
+occupy turn Empty actor                                     = return $ Piece turn actor
+occupy turn (Piece col _) actor               | col /= turn = return $ Piece turn actor
+occupy turn (Piece col (Prime p0)) (Prime p1) | turn == col = return $ Piece turn $ hybridSorted p0 p1
+occupy _ _ _                                                = mzero
 
-isRanger piece = case piece of
-                  Prime p -> isRanger p
-                  Hybrid p1 p2 -> isRanger p1 || isRanger p2
-                  _ -> False
+liftBool :: MonadPlus m => Bool -> m ()
+liftBool True = return ()
+liftBool False = mzero
+
+xor :: Bool -> Bool -> Bool
+xor x y = x /= y
+
+makeMove :: MonadPlus m => Position -> MoveDesc -> m Position
+makeMove (Position (Board brd) turn) (MoveDesc actor src@(Loc _ ySrc) dst _) = do
+  leftItem <- leave srcItem actor
+  occItem <- occupy turn dstItem actor
+  pmove@(basicLeaper, basicVector, range) <- parseMovement vec
+  _ <- liftBool $ matchPiece pmove
+  _ <- liftBool $ all checkRider [1..range-1]
+  return $ Position (Board (brd // [(src, leftItem), (dst, occItem)])) (inv turn)
   where
-    isRanger R = True
-    isRanger B = True
-    isRanger _ = False
+    srcItem = brd ! src
+    dstItem = brd ! dst
+    vec@(Vector _ yVec) = dst `sub` src
+    checkRider k = (brd ! (src `add` (k `mult` vec))) == Empty
+
+    matchPiece :: (BasicLeaper, Vector, Int) -> Bool
+    matchPiece (basicLeaper, basicVector, range) =
+      case actor of
+        Hybrid p1 p2 -> matchPrime p1 || matchPrime p2
+        Prime p1     -> matchPrime p1
+        K            -> matchPrime G
+        P            -> matchPawn
+      where
+        matchPrime R = basicLeaper == Vizir
+        matchPrime B = basicLeaper == Ferz
+        matchPrime N = range == 1 && basicLeaper == Knight
+        matchPrime G = range == 1 && basicLeaper `elem` [Vizir, Ferz]
+
+        matchPawn = pawnIsForward && pawnMatchLeaper && case range of
+                                                          1 -> True
+                                                          2 -> pawnIsAtSecond
+
+        pawnIsForward = (yVec > 0) `xor` (turn == White)
+        pawnIsAtSecond = case turn of White -> ySrc == 1
+                                      Black -> ySrc == 6
+        pawnMatchLeaper = case basicLeaper of Ferz -> isAttack
+                                              Vizir -> not isAttack
+                                              _ -> False
+
+    isAttack = case dstItem of Piece col _ | col /= turn -> True
+                               _ -> False
 
 readItem = between (char '(') (char ')') readHybrid <++ readSingle where
   readSingle = do
@@ -156,7 +160,7 @@ readItem = between (char '(') (char ')') readHybrid <++ readSingle where
     (c1, p1) <- readPrime
     (c2, p2) <- readPrime
     if c1 == c2
-      then return $ Piece c1 $ Hybrid p1 p2
+      then return $ Piece c1 $ hybridSorted p1 p2
       else pfail
 
   readPrime = do
@@ -210,3 +214,6 @@ instance Show Board where
 emptyBoard = Board $ listArray (Loc 0 0, Loc 7 7) (repeat Empty)
 initialBoard :: Board
 initialBoard = read "rnbgkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBGKBNR"
+
+initialPosition = Position initialBoard White
+

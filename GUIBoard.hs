@@ -5,6 +5,7 @@ import Graphics.UI.WXCore.Events
 import Graphics.UI.WXCore.WxcTypes
 import Graphics.UI.WXCore.Draw
 import System.FilePath (FilePath, (</>))
+import Control.Monad
 import Data.Array.Unboxed
 import Atoms
 import Pieces
@@ -53,7 +54,18 @@ gui = do
         varSet dragPos point
 
   let onUnclick point = do
+        sp <- varGet selected
         varSet selected Nothing
+        case (sp, selectLoc point) of
+          (Just (src, _, Piece _ actor), Just dst) -> makeMove' (MoveDesc actor src dst Pass)
+                                                      `mplus` return ()
+          _ -> return ()
+          where
+            makeMove' move = do
+              brd <- varGet currBoard
+              let pos = Position brd White
+              Position brd' _ <- makeMove pos move
+              varSet currBoard brd'
 
   let onDrag point = do
         varSet dragPos point
