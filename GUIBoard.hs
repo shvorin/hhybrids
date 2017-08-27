@@ -15,7 +15,7 @@ main = start gui
 
 gui :: IO ()
 gui = do
-  dragPos <- varCreate pointNull
+  dragPoint <- varCreate pointNull
   selected <- varCreate Nothing
   currBoard <- varCreate initialBoard
 
@@ -39,19 +39,19 @@ gui = do
         sp <- varGet selected
         brd@(Board arr) <- varGet currBoard
         drawBoard dc brd sp
-        pos <- varGet dragPos
+        point <- varGet dragPoint
         case sp of
          Nothing -> return ()
          Just (loc, rest, actor) -> do
-           drawItemAt dc actor pos
-           circle dc pos 20 [brush := brushSolid red]
+           drawItemAt dc actor point
+           circle dc point 20 [brush := brushSolid red]
 
   let onClick point = do
         brd <- varGet currBoard
         let sp = selectPiece point brd
         putStrLn $ "selected: " ++ show sp ++ ", at " ++ show point
         varSet selected sp
-        varSet dragPos point
+        varSet dragPoint point
 
   let onUnclick point = do
         sp <- varGet selected
@@ -68,7 +68,7 @@ gui = do
               varSet currBoard brd'
 
   let onDrag point = do
-        varSet dragPos point
+        varSet dragPoint point
   
   f <- frame [ resizeable := False ]
   p <- panel f [on keyboard      := \k -> (putStrLn $ "key: " ++ show k)
