@@ -17,7 +17,7 @@ gui :: IO ()
 gui = do
   dragPoint <- varCreate pointNull
   selected <- varCreate Nothing
-  currBoard <- varCreate initialBoard
+  currPosition <- varCreate initialPosition
 
   let onPaint1 dc viewArea = do
         drawRect dc (Rect (xsize-1) (xsize-1) (8*xsize+2) (8*xsize+2)) [ ]
@@ -37,8 +37,8 @@ gui = do
   let onPaint dc viewArea = do
         onPaint1 dc viewArea
         sp <- varGet selected
-        brd@(Board arr) <- varGet currBoard
-        drawBoard dc brd sp
+        pos <- varGet currPosition
+        drawBoard dc pos sp
         point <- varGet dragPoint
         case sp of
          Nothing -> return ()
@@ -47,7 +47,7 @@ gui = do
            circle dc point 20 [brush := brushSolid red]
 
   let onClick point = do
-        brd <- varGet currBoard
+        Position brd _ <- varGet currPosition
         let sp = selectPiece point brd
         putStrLn $ "selected: " ++ show sp ++ ", at " ++ show point
         varSet selected sp
@@ -62,10 +62,9 @@ gui = do
           _ -> return ()
           where
             makeMove' move = do
-              brd <- varGet currBoard
-              let pos = Position brd White
-              Position brd' _ <- makeMove pos move
-              varSet currBoard brd'
+              pos <- varGet currPosition
+              pos' <- makeMove pos move
+              varSet currPosition pos'
 
   let onDrag point = do
         varSet dragPoint point
@@ -143,9 +142,12 @@ drawItemAt dc item point =
       sz <- get bm size
       drawBitmap dc bm (placePiece placement point sz) True []
 
-drawBoard :: DC () -> Board -> Maybe (Loc, Item, Item) -> IO ()
-drawBoard dc (Board arr) masked =
+drawBoard :: DC () -> Position -> Maybe (Loc, Item, Item) -> IO ()
+drawBoard dc (Position (Board arr) turn) masked = do
   mapM_ (\(loc, item) -> drawItem dc item masked loc) $ assocs arr
+  circle dc point 20 [brush := brushSolid color]
+  where color = case turn of { White -> white; Black -> black }
+        point = (Point (9*xsize + xsize `div` 2) (5*xsize))
 
 selectLoc :: Point -> Maybe Loc
 selectLoc (Point x y) =
