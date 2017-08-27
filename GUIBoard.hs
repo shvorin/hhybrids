@@ -21,10 +21,10 @@ gui = do
   let onPaint1 dc viewArea = do
         drawRect dc (Rect (xsize-1) (xsize-1) (8*xsize+2) (8*xsize+2)) [ ]
         let drawLoc (Loc f r) = do
-              drawRect dc (Rect (xsize*r) (xsize*f) xsize xsize) [ brush := brushSolid rgbCol ]
+              drawRect dc (Rect (xsize*(r+1)) (xsize*(f+1)) xsize xsize) [ brush := brushSolid rgbCol ]
                 where rgbCol = if (f + r) `mod` 2 == 0
                                then colorRGB 153 153 153 else colorRGB 243 243 243
-        mapM_ drawLoc $ range (Loc 1 1, Loc 8 8)
+        mapM_ drawLoc $ range (Loc 0 0, Loc 7 7)
 
         mapM_ (\r -> drawText dc (show (9-r)) (Point (xsize `div` 2) (xsize * r + xsize `div` 2)) [])
           [1..8]
@@ -112,7 +112,7 @@ placePiece placement (Point x y) (Size w h) = Point x' y' where
 
 drawItem :: DC () -> Item -> Maybe (Loc, Item, Item) -> Loc -> IO ()
 drawItem dc item masked loc@(Loc f r) =
-  drawItemAt dc item' (Point (f*xsize + xsize `div` 2) ((9-r)*xsize + xsize `div` 2)) where
+  drawItemAt dc item' (Point ((f+1)*xsize + xsize `div` 2) ((8-r)*xsize + xsize `div` 2)) where
     item' = case masked of
              Just (loc', rest, _) | loc == loc' -> rest
              _ -> item
@@ -137,11 +137,11 @@ drawBoard dc (Board arr) masked =
 
 selectLoc :: Point -> Maybe Loc
 selectLoc (Point x y) =
-  if inRange (1,8) f && inRange (1,8) r then Just loc else Nothing
+  if inRange (0,7) f && inRange (0,7) r then Just loc else Nothing
   where
-    f = x `div` xsize
-    r = y `div` xsize
-    loc = Loc f (9-r)
+    f = (x `div` xsize) - 1
+    r = (y `div` xsize) - 1
+    loc = Loc f (7-r)
 
 selectPiece :: Point -> Board -> Maybe (Loc, Item, Item)
 selectPiece point@(Point x y) (Board arr) = do

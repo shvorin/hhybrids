@@ -17,7 +17,7 @@ sub :: Loc -> Loc -> Vector
 sub (Loc x y) (Loc x' y') = Vector (x-x') (y-y')
 
 instance Show Loc where
-  show (Loc f r) = toEnum (fromEnum 'a' + f - 1) : show r
+  show (Loc f r) = [toEnum (fromEnum 'a' + f), toEnum (fromEnum '1' + r)]
 
 rot90 (x,y) = (-y, x)
 rep4 v = take 4 $ rep v where

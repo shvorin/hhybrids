@@ -22,7 +22,7 @@ instance Read Loc where
         readFileOrRank pair = do
           c <- get
           if inRange pair c then
-            return (index pair c + 1)
+            return $ index pair c
             else pfail
 
 instance Show Piece where
@@ -181,20 +181,20 @@ readFEN state@(r, f, acc) = do
   case (r, f) of
     (7, 8) -> return acc
     (_, 8) -> char '/' >> readFEN(r+1, 0, acc)
-    _ -> (readItem >>= (\item -> readFEN(r, f+1, (Loc (f+1) (r+1), item):acc))) <++ readDigit state
+    _ -> (readItem >>= (\item -> readFEN(r, f+1, (Loc f r, item):acc))) <++ readDigit state
 
 -- reads FEN
 instance Read Board where
   readPrec = mkReadPrec $ do
     ls <- readFEN (0, 0, [])
-    return $ Board (listArray (Loc 1 1, Loc 8 8) (repeat Empty) // ls)
+    return $ Board (listArray (Loc 0 0, Loc 7 7) (repeat Empty) // ls)
 
 -- writes FEN
 instance Show Board where
-  show (Board arr) = showFEN 1 0 1
+  show (Board arr) = showFEN 0 0 0
     where
-      showFEN 8 empties 9 = showEmpties empties
-      showFEN r empties 9 = showEmpties empties ++ "/" ++ showFEN (r+1) 0 1
+      showFEN 7 empties 8 = showEmpties empties
+      showFEN r empties 8 = showEmpties empties ++ "/" ++ showFEN (r+1) 0 0
       showFEN r empties f = case arr ! (Loc f r) of
             Empty -> showFEN r (empties+1) (f+1)
             Piece c piece -> showEmpties empties ++ showPiece c piece ++ showFEN r 0 (f+1)
@@ -207,6 +207,6 @@ instance Show Board where
       showEmpties 0 = ""
       showEmpties empties = show empties
 
-emptyBoard = Board $ listArray (Loc 1 1, Loc 8 8) (repeat Empty)
+emptyBoard = Board $ listArray (Loc 0 0, Loc 7 7) (repeat Empty)
 initialBoard :: Board
 initialBoard = read "rnbgkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBGKBNR"
