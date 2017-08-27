@@ -6,6 +6,7 @@ import Graphics.UI.WXCore.WxcTypes
 import Graphics.UI.WXCore.Draw
 import System.FilePath (FilePath, (</>))
 import Data.Array.Unboxed
+import Atoms
 import Pieces
 
 main :: IO ()

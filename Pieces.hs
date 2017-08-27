@@ -5,15 +5,10 @@ import GHC.Read
 import Text.ParserCombinators.ReadPrec (readP_to_Prec, readPrec_to_P)
 import qualified Data.Char
 import Text.ParserCombinators.ReadP
-
-data Loc = Loc Int Int deriving (Eq, Ord, Ix)
+import Atoms
 
 mkReadPrec r = readP_to_Prec (\_ -> r)
 mkReadP r = readPrec_to_P r 0
-
-instance Show Loc where
-  show (Loc f r) = [files !! f] ++ show r where
-    files = ".abcdefgh"
 
 ranks_range = ('1','8')
 files_range = ('a','h')
@@ -56,56 +51,83 @@ data Item = Piece Color Piece | Empty deriving Show
 
 data Board = Board (Array Loc Item)
 
-data Vector = Vector Int Int
+-- attacks :: Piece -> [Vector]
+-- attacks = map (uncurry Vector) . attacks' where
+--   attacks' piece = case piece of
+--                      Prime R -> rep4 (0,1)
+--                      Prime B -> rep4 (1,1)
+--                      Prime N -> rep4 (1,2) ++ rep4 (2,1)
+--                      Hybrid p1 p2 -> attacks' (Prime p1) ++ attacks' (Prime p2)
+--                      P -> [(1,1), (-1,1)]
+--                      _ | piece `elem` [Prime G, K] -> rep4 (0,1) ++ rep4 (1,1)
 
-add :: Loc -> Vector -> Loc
-add (Loc x y) (Vector u v) = Loc (x+u) (y+v)
+-- land :: (Piece, Color) -> Item -> Maybe Item
+-- land (actor, color) target =
+--   case target of
+--     Empty -> Just $ Piece color actor
+--     Piece targetColor targetPiece ->
+--       if color == targetColor then
+--         case (actor, targetPiece) of
+--           -- join
+--           (Prime p1, Prime p2) -> Just $ Piece color (Hybrid p1 p2)
+--           _ -> Nothing
+--       else
+--         -- capture
+--         Just $ Piece color actor
 
-rot90 (x,y) = (-y, x)
-rep4 v = take 4 $ rep v where
-  rep v = v:rep (rot90 v)
 
-attacks :: Piece -> [Vector]
-attacks = map (uncurry Vector) . attacks' where
-  attacks' piece = case piece of
-                     Prime R -> rep4 (0,1)
-                     Prime B -> rep4 (1,1)
-                     Prime N -> rep4 (1,2) ++ rep4 (2,1)
-                     Hybrid p1 p2 -> attacks' (Prime p1) ++ attacks' (Prime p2)
-                     P -> [(1,1), (-1,1)]
-                     _ | piece `elem` [Prime G, K] -> rep4 (0,1) ++ rep4 (1,1)
+data Position = Position { board :: Board
+                         , turn :: Color
+                           -- TODO
+                         }
 
-land :: (Piece, Color) -> Item -> Maybe Item
-land (actor, color) target =
-  case target of
-    Empty -> Just $ Piece color actor
-    Piece targetColor targetPiece ->
-      if color == targetColor then
-        case (actor, targetPiece) of
-          -- join
-          (Prime p1, Prime p2) -> Just $ Piece color (Hybrid p1 p2)
-          _ -> Nothing
-      else
-        -- capture
-        Just $ Piece color actor
+data MoveSign = Pass | Capture | Join
+data SrcLoc = SrcLoc (Maybe Int) (Maybe Int)
 
-iterMoves :: Piece -> Board -> Loc -> [Loc]
-iterMoves piece (Board board) src =
-  do
-    v <- attacks piece
-    let foo x =
-          let
-            y = add x v
-          in
-            if inRange (bounds board) y then
-              case board ! y of
-                Empty | isRanger piece -> y : foo y
-                _ -> [y]
-            else
-              []
-            
-    x <- foo src
-    return x
+-- data MoveDesc = MoveDesc { actor :: Piece Option
+--                          , src :: Loc
+--                          , dst :: SrcLoc
+--                          , moveSignd :: MoveSign
+--                          -- TODO: promotion, etc
+--                          }
+data MoveDesc = MoveDesc { actor :: Piece
+                         , src :: Loc
+                         , dst :: Loc
+                         , moveSignd :: MoveSign
+                         -- TODO: promotion, etc
+                         }
+
+tryMove :: Position -> MoveDesc -> Either String Position
+tryMove (Position (Board brd) turn) (MoveDesc actor src dst _) = do
+  let srcPiece = brd ! src
+  leftItem <- bar srcPiece
+  (basicLeaper, basicVector, range) <- foo
+  undefined where
+    vec@(Vector u v) = dst `sub` src
+    u' = abs u
+    v' = abs v
+    su = signum u
+    sv = signum v
+    foo :: Either String (BasicLeaper, Vector, Int)
+    foo = case (u, v) of
+            (0, 0) -> Left "dst == src"
+            (0, _) -> Right (Vizir, Vector 0 sv, v)
+            (_, 0) -> Right (Vizir, Vector su 0, u)
+            _ | u' == v' -> Right (Ferz, Vector su sv, 0)
+            _ | u' * 2 == v' -> Right (Knight, Vector (2 * su) sv, v)
+            _ | v' * 2 == u' -> Right (Knight, Vector su (2 * sv), u)
+            _ -> Left "no such leaper"
+    bar :: Item -> Either String Item
+    bar srcItem = case srcItem of
+                    Empty -> Left "empty square"
+                    Piece col p | col == turn ->
+                                    case p of
+                                      Hybrid p1 p2 -> case actor of Prime a | a == p1 -> Right $ Piece turn $ Prime p2
+                                                                    Prime a | a == p2 -> Right $ Piece turn $ Prime p1
+                                                                    _ -> Left "wrong actor"
+                                      _ | p == actor -> Right Empty
+                    Piece _ _ -> Left "wrong turn"
+
 
 isRanger piece = case piece of
                   Prime p -> isRanger p
