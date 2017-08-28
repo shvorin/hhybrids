@@ -47,7 +47,7 @@ gui = do
            circle dc point 20 [brush := brushSolid red]
 
   let onClick point = do
-        Position brd _ <- varGet currPosition
+        Position {board = brd} <- varGet currPosition
         let sp = selectPiece point brd
         putStrLn $ "selected: " ++ show sp ++ ", at " ++ show point
         varSet selected sp
@@ -143,7 +143,7 @@ drawItemAt dc item point =
       drawBitmap dc bm (placePiece placement point sz) True []
 
 drawBoard :: DC () -> Position -> Maybe (Loc, Item, Item) -> IO ()
-drawBoard dc (Position (Board arr) turn) masked = do
+drawBoard dc (Position {board = Board arr, turn = turn}) masked = do
   mapM_ (\(loc, item) -> drawItem dc item masked loc) $ assocs arr
   circle dc point 20 [brush := brushSolid color]
   where color = case turn of { White -> white; Black -> black }

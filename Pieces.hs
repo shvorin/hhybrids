@@ -58,9 +58,14 @@ inv White = Black
 
 data Board = Board (Array Loc Item)
 
+data CastleAllowed = CastleAllowed { wk, wq, bk, bq :: Bool}
+
 data Position = Position { board :: Board
                          , turn :: Color
-                           -- TODO
+                         , castle :: CastleAllowed
+                         , en_passant :: Maybe Loc
+                         , ply_clock :: Int
+                         , move_number :: Int
                          }
 
 data MoveSign = Pass | Capture | Join
@@ -104,13 +109,15 @@ xor :: Bool -> Bool -> Bool
 xor x y = x /= y
 
 makeMove :: MonadPlus m => Position -> MoveDesc -> m Position
-makeMove (Position (Board brd) turn) (MoveDesc actor src@(Loc _ ySrc) dst _) = do
+makeMove pos@(Position {board = Board brd, turn = turn}) (MoveDesc actor src@(Loc _ ySrc) dst _) = do
   leftItem <- leave turn srcItem actor
   occItem <- occupy turn dstItem actor
   pmove@(basicLeaper, basicVector, range) <- parseMovement vec
   _ <- liftBool $ matchPiece pmove
   _ <- liftBool $ all (checkRider basicVector) [1..range-1]
-  return $ Position (Board (brd // [(src, leftItem), (dst, occItem)])) (inv turn)
+  return $ pos { board = Board (brd // [(src, leftItem), (dst, occItem)])
+               , turn = inv turn
+               }
   where
     srcItem = brd ! src
     dstItem = brd ! dst
@@ -190,13 +197,14 @@ readFEN state@(r, f, acc) = do
     (_, 8) -> char '/' >> readFEN(r+1, 0, acc)
     _ -> (readItem >>= (\item -> readFEN(r, f+1, (Loc f r, item):acc))) <++ readDigit state
 
--- reads FEN
+-- FEN: https://en.wikipedia.org/wiki/Forsyth%E2%80%93Edwards_Notation
+-- reads FEN, FIXME: FEN is from rank 8 to rank 1
 instance Read Board where
   readPrec = mkReadPrec $ do
     ls <- readFEN (0, 0, [])
     return $ Board (listArray (Loc 0 0, Loc 7 7) (repeat Empty) // ls)
 
--- writes FEN
+-- writes FEN, FIXME: FEN is from rank 8 to rank 1
 instance Show Board where
   show (Board arr) = showFEN 0 0 0
     where
@@ -218,5 +226,11 @@ emptyBoard = Board $ listArray (Loc 0 0, Loc 7 7) (repeat Empty)
 initialBoard :: Board
 initialBoard = read "rnbgkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBGKBNR"
 
-initialPosition = Position initialBoard White
+initialPosition = Position { board = initialBoard
+                           , turn = White
+                           , castle = CastleAllowed True True True True
+                           , en_passant = Nothing
+                           , ply_clock = 0
+                           , move_number = 0
+                           }
 
