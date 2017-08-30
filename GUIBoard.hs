@@ -57,14 +57,18 @@ gui = do
         sp <- varGet selected
         varSet selected Nothing
         case (sp, selectLoc point) of
-          (Just (src, _, Piece _ actor), Just dst) -> makeMove' (MoveDesc actor src dst Pass)
-                                                      `mplus` return ()
+          (Just (src, _, Piece _ actor), Just dst) -> makeMove' actor src dst `mplus` return ()
           _ -> return ()
           where
-            makeMove' move = do
+            makeMove' actor src dst@(Loc f r) = do
               pos <- varGet currPosition
-              pos' <- makeMove pos move
-              varSet currPosition pos'
+              pos'@(Position {board = Board brd}) <- makeMove pos (MoveDesc actor src dst Pass)
+              let col = turn pos
+              let atEight = case col of { White -> r == 7; Black -> r == 0 }
+              let pos'' = if atEight && actor == P
+                          then pos' {board = Board $ brd // [(dst, Piece col (Prime R))]}
+                          else pos'
+              varSet currPosition pos''
 
   let onDrag point = do
         varSet dragPoint point
